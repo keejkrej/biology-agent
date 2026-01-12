@@ -60,9 +60,6 @@ cp -r "$SOURCE_DIR/mcp-server" "$INSTALL_DIR/"
 echo "   Copying scripts/..."
 cp -r "$SOURCE_DIR/scripts" "$INSTALL_DIR/"
 
-echo "   Copying .mcp.json..."
-cp "$SOURCE_DIR/.mcp.json" "$INSTALL_DIR/"
-
 echo "${GREEN}✓${NC} Plugin files copied to $INSTALL_DIR"
 echo ""
 
@@ -95,8 +92,8 @@ echo "7️⃣  Registering MCP server with Claude Code..."
 # Remove old entry if exists
 claude mcp remove biology 2>/dev/null || true
 
-# Add MCP server globally
-claude mcp add biology --global -- "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/mcp-server/server.py"
+# Add MCP server globally (user scope)
+claude mcp add biology -s user -- "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/mcp-server/server.py"
 echo "${GREEN}✓${NC} MCP server registered"
 echo ""
 
