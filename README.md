@@ -5,19 +5,23 @@ A comprehensive toolkit for analyzing microscopy image data in Claude Code, buil
 ## 📁 Repository Structure
 
 ```
-biology-agent/
-├── plugin/              # Plugin files (installed to ~/.claude/plugins/repos/)
-│   ├── .claude-plugin/  # Plugin metadata
-│   ├── .mcp.json        # MCP server configuration
-│   ├── mcp-server/      # Python MCP server
-│   ├── scripts/         # CLI tools
-│   └── skills/          # Claude Code skills
-├── tests/               # Test files and examples
-├── install.sh           # Installation script
+biology-agent/                    # Marketplace root
+├── .claude-plugin/
+│   └── marketplace.json          # Marketplace manifest
+├── biology-microscopy/           # The plugin
+│   ├── .claude-plugin/
+│   │   └── plugin.json           # Plugin metadata
+│   ├── .mcp.json                 # MCP server configuration (uses uvx)
+│   ├── mcp-server/               # Python MCP server package
+│   │   ├── pyproject.toml        # Package configuration
+│   │   └── biology_mcp_server/   # Server code
+│   ├── scripts/                  # CLI tools
+│   └── skills/                   # Claude Code skills
+├── tests/                        # Test files
 └── README.md
 ```
 
-**Note:** The `plugin/` directory contains all files that get installed globally. This keeps your development workspace clean - Claude will use the installed version from `~/.claude/plugins/repos/biology-microscopy`, not the local files.
+This repository is structured as a **Claude Code marketplace** containing the `biology-microscopy` plugin.
 
 ## 🎯 What Is This?
 
@@ -33,7 +37,7 @@ The Biology Agent provides an interactive microscopy data analysis assistant tha
 
 The toolkit uses a **hybrid approach** combining three components:
 
-### 1. MCP Server (`plugin/mcp-server/`)
+### 1. MCP Server (`biology-microscopy/mcp-server/`)
 Exposes bioio capabilities as tools that Claude Code can call directly:
 - `read_microscopy_metadata` - Extract complete metadata
 - `get_image_info` - Quick summary information
@@ -42,12 +46,12 @@ Exposes bioio capabilities as tools that Claude Code can call directly:
 - `get_physical_dimensions` - Physical sizes in micrometers
 - `validate_microscopy_file` - File validation and quality checks
 
-### 2. Claude Code Skills (`plugin/skills/`)
+### 2. Claude Code Skills (`biology-microscopy/skills/`)
 Pre-packaged workflows for common tasks:
 - `/extract-metadata-batch` - Process folders of files
 - `/analyze-microscopy-file` - Comprehensive single-file analysis
 
-### 3. Helper CLI Scripts (`plugin/scripts/`)
+### 3. Helper CLI Scripts (`biology-microscopy/scripts/`)
 Standalone command-line tools:
 - `microscopy-info` - Display file metadata
 - `batch-convert-metadata` - Export metadata to CSV/JSON
@@ -55,30 +59,38 @@ Standalone command-line tools:
 
 ## 📦 Installation
 
-### ⚡ Quick Install (Recommended)
+### ⚡ Via Claude Code Marketplace (Recommended)
 
-**One command to set up everything:**
+Install directly from Claude Code using the `/plugin` command:
 
-```bash
-# Clone and install
-git clone <your-repo-url> ~/workspace/biology-agent
-cd ~/workspace/biology-agent
-./install.sh
+```
+/plugin marketplace add keejkrej/biology-agent
+/plugin install biology-microscopy@keejkrej
 ```
 
-The installer automatically:
-- ✅ Checks for Python 3.12+ and uv
-- ✅ Creates virtual environment
-- ✅ Installs dependencies (bioio, fastmcp, plugins)
-- ✅ Sets up Claude Code plugin
-- ✅ Makes CLI scripts executable
-- ✅ Tests the MCP server
+Then **restart Claude Code** (quit completely and reopen).
 
-**After installation: Restart Claude Code** (quit completely and reopen).
+The MCP server uses `uvx` to automatically manage dependencies - no manual Python setup required.
+
+### 📍 Local Installation (Development)
+
+For development or testing:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/keejkrej/biology-agent.git
+   cd biology-agent
+   ```
+
+2. In Claude Code, run `/plugin` and select **"Add local plugin"**
+
+3. Navigate to the `biology-microscopy/` directory and select it
+
+4. Restart Claude Code
 
 ### Prerequisites
 
-- **[uv](https://github.com/astral-sh/uv)** - Fast Python package manager
+- **[uv](https://github.com/astral-sh/uv)** - Required for `uvx` (handles MCP server dependencies automatically)
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
@@ -86,14 +98,31 @@ The installer automatically:
 
 ### Optional: Add CLI Tools to PATH
 
+The plugin includes standalone CLI scripts. To use them from anywhere:
+
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
-export PATH="$HOME/workspace/biology-agent/scripts:$PATH"
+export PATH="$HOME/path/to/biology-agent/biology-microscopy/scripts:$PATH"
 
 # Then use from anywhere:
 microscopy-info /path/to/image.tif
 batch-convert-metadata /path/to/folder --format csv
 validate-formats /path/to/file.nd2
+```
+
+### Optional: Install Additional Format Support
+
+By default, OME-TIFF and ND2 formats are supported. For additional formats:
+
+```bash
+# Zeiss CZI files
+uvx --from biology-mcp-server[czi] biology-mcp-server
+
+# Leica LIF files
+uvx --from biology-mcp-server[lif] biology-mcp-server
+
+# All formats
+uvx --from biology-mcp-server[all] biology-mcp-server
 ```
 
 ## 🚀 Usage
@@ -264,14 +293,24 @@ This is a 4D dataset (time-lapse with Z-stacks). Consider:
 ### Test the MCP Server
 
 ```bash
-# Activate the virtual environment
-source .venv/bin/activate
+# Test via uvx (recommended)
+uvx --from ./biology-microscopy/mcp-server biology-mcp-server
 
-# Run the server (it should start without errors)
-python mcp-server/server.py
+# Or install and run locally
+cd biology-microscopy/mcp-server
+uv pip install -e .
+biology-mcp-server
 ```
 
 The server will listen for MCP protocol messages on stdin. Press Ctrl+C to stop.
+
+### Verify Plugin Installation
+
+In Claude Code:
+```
+/mcp
+# Should show "biology" server as connected
+```
 
 ### Test with Sample Files
 
@@ -308,22 +347,20 @@ microscopy-info test_image.ome.tiff
 **Issue:** Claude Code doesn't see the biology MCP server.
 
 **Solutions:**
-1. Check the config file path: `~/.config/claude/config.json`
-2. Verify paths are absolute (no `~` in JSON)
-3. Restart Claude Code after config changes
-4. Check server starts: `python mcp-server/server.py`
+1. Run `/mcp` in Claude Code to check server status
+2. Ensure `uv` is installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+3. Restart Claude Code completely after plugin installation
+4. Test server manually: `uvx --from ./biology-microscopy/mcp-server biology-mcp-server`
 
 ### Import Errors
 
 **Issue:** `ModuleNotFoundError: No module named 'bioio'`
 
 **Solution:**
+The uvx command should handle dependencies automatically. If issues persist:
 ```bash
-# Make sure you're in the virtual environment
-source .venv/bin/activate
-
-# Reinstall dependencies
-uv pip install -r mcp-server/requirements.txt
+# Clear uvx cache and retry
+uvx cache clean
 ```
 
 ### File Format Not Supported
@@ -331,24 +368,21 @@ uv pip install -r mcp-server/requirements.txt
 **Issue:** `bioio.exceptions.UnsupportedFileFormatError`
 
 **Solution:**
-Install the appropriate plugin:
+Install the appropriate plugin extras:
 ```bash
-# For CZI files
-uv pip install bioio-czi
-
-# For LIF files
-uv pip install bioio-lif
+# Install with all format support
+uvx --from "biology-mcp-server[all]" biology-mcp-server
 ```
 
 ### Permission Errors on Scripts
 
-**Issue:** `Permission denied` when running scripts
+**Issue:** `Permission denied` when running CLI scripts
 
 **Solution:**
 ```bash
-chmod +x scripts/microscopy-info
-chmod +x scripts/batch-convert-metadata
-chmod +x scripts/validate-formats
+chmod +x biology-microscopy/scripts/microscopy-info
+chmod +x biology-microscopy/scripts/batch-convert-metadata
+chmod +x biology-microscopy/scripts/validate-formats
 ```
 
 ## 🔮 Future Enhancements

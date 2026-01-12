@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Biology Microscopy MCP Server
 
@@ -11,7 +10,7 @@ from typing import Optional, Dict, Any
 from fastmcp import FastMCP
 
 # Import core functions
-from core import (
+from .core import (
     read_microscopy_metadata as _read_microscopy_metadata,
     get_image_info as _get_image_info,
     list_scenes as _list_scenes,
@@ -135,7 +134,10 @@ def validate_microscopy_file(file_path: str) -> Dict[str, Any]:
     return _validate_microscopy_file(file_path)
 
 
-if __name__ == "__main__":
-    # Run the MCP server with stdio transport
+def main():
+    """Run the MCP server with stdio transport."""
     mcp.run()
 
+
+if __name__ == "__main__":
+    main()
