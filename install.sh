@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Get the script's directory (source location)
 SCRIPT_DIR="$( cd "$( dirname "${(%):-%x}" )" && pwd )"
-SOURCE_DIR="$SCRIPT_DIR/plugin"
+SOURCE_DIR="$SCRIPT_DIR/biology-microscopy"
 INSTALL_DIR="$HOME/.claude/plugins/repos/biology-microscopy"
 
 echo "📍 Source: $SOURCE_DIR"
@@ -60,9 +60,6 @@ cp -r "$SOURCE_DIR/mcp-server" "$INSTALL_DIR/"
 echo "   Copying scripts/..."
 cp -r "$SOURCE_DIR/scripts" "$INSTALL_DIR/"
 
-echo "   Copying skills/..."
-cp -r "$SOURCE_DIR/skills" "$INSTALL_DIR/"
-
 echo "   Copying .mcp.json..."
 cp "$SOURCE_DIR/.mcp.json" "$INSTALL_DIR/"
 
@@ -92,149 +89,31 @@ chmod +x "$INSTALL_DIR/scripts/validate-formats"
 echo "${GREEN}✓${NC} Scripts are executable"
 echo ""
 
-# Step 7: Create custom marketplace for auto-discovery
-echo "7️⃣  Setting up custom marketplace (keejkrej) for auto-discovery..."
-MARKETPLACE_DIR="$HOME/.claude/plugins/marketplaces/keejkrej"
-mkdir -p "$MARKETPLACE_DIR/.claude-plugin"
+# Step 7: Register MCP server with Claude Code
+echo "7️⃣  Registering MCP server with Claude Code..."
 
-# Copy plugin files to marketplace
-echo "   Copying plugin to marketplace..."
-cp -r "$INSTALL_DIR"/* "$MARKETPLACE_DIR"/
+# Remove old entry if exists
+claude mcp remove biology 2>/dev/null || true
 
-# Create marketplace.json for discovery
-echo "   Creating marketplace.json..."
-python3 - "$MARKETPLACE_DIR" << 'PYEOF'
-import json
-import os
-import sys
-
-marketplace_dir = sys.argv[1]
-plugin_name = "biology-microscopy"
-
-marketplace_json = {
-    "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-    "name": "keejkrej",
-    "description": "Biology microscopy analysis toolkit",
-    "owner": {
-        "name": "Biology Research Community"
-    },
-    "plugins": [
-        {
-            "name": plugin_name,
-            "description": "Microscopy data analysis toolkit with bioio. Read metadata, validate files, and analyze microscopy images (OME-TIFF, ND2, CZI, etc.).",
-            "version": "1.0.0",
-            "author": {
-                "name": "Biology Research Community"
-            },
-            "source": f"./{plugin_name}",
-            "category": "science"
-        }
-    ]
-}
-
-with open(os.path.join(marketplace_dir, ".claude-plugin", "marketplace.json"), "w") as f:
-    json.dump(marketplace_json, f, indent=2)
-    f.write("\n")
-
-print("   ✓ marketplace.json created")
-PYEOF
-
-echo "${GREEN}✓${NC} Marketplace plugin ready at $MARKETPLACE_DIR"
+# Add MCP server globally
+claude mcp add biology --global -- "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/mcp-server/server.py"
+echo "${GREEN}✓${NC} MCP server registered"
 echo ""
 
-# Step 8: Update known_marketplaces.json
-echo "8️⃣  Registering custom marketplace (keejkrej)..."
-KNOWN_MARKETPLACES="$HOME/.claude/plugins/known_marketplaces.json"
-MARKETPLACE_DIR="$HOME/.claude/plugins/marketplaces/keejkrej"
+# Step 8: Copy skills to Claude skills directory
+echo "8️⃣  Setting up skills..."
+SKILLS_DIR="$HOME/.claude/skills"
+mkdir -p "$SKILLS_DIR"
 
-if [ -f "$KNOWN_MARKETPLACES" ]; then
-    # Check if keejkrej already exists
-    if grep -q '"keejkrej"' "$KNOWN_MARKETPLACES" 2>/dev/null; then
-        echo "   keejkrej marketplace already registered, updating timestamp..."
-        # Use python for safe JSON manipulation
-        python3 << PYEOF
-import json
-import os
-from datetime import datetime, timezone
-
-with open(os.path.expanduser("$KNOWN_MARKETPLACES"), 'r') as f:
-    data = json.load(f)
-
-data["keejkrej"] = {
-    "source": {
-        "source": "github",
-        "repo": "keejkrej/biology-agent"
-    },
-    "installLocation": os.path.expanduser("$MARKETPLACE_DIR"),
-    "lastUpdated": datetime.now(timezone.utc).isoformat()
-}
-
-with open(os.path.expanduser("$KNOWN_MARKETPLACES"), 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-PYEOF
-        echo "${GREEN}✓${NC} Updated keejkrej entry"
-    else
-        # Add new entry to existing file
-        python3 << PYEOF
-import json
-import os
-from datetime import datetime, timezone
-
-with open(os.path.expanduser("$KNOWN_MARKETPLACES"), 'r') as f:
-    data = json.load(f)
-
-data["keejkrej"] = {
-    "source": {
-        "source": "github",
-        "repo": "keejkrej/biology-agent"
-    },
-    "installLocation": os.path.expanduser("$MARKETPLACE_DIR"),
-    "lastUpdated": datetime.now(timezone.utc).isoformat()
-}
-
-with open(os.path.expanduser("$KNOWN_MARKETPLACES"), 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-PYEOF
-        echo "${GREEN}✓${NC} Added keejkrej to known_marketplaces.json"
+# Copy each skill from the plugin
+for skill_dir in "$SOURCE_DIR/skills"/*/; do
+    if [ -d "$skill_dir" ]; then
+        skill_name=$(basename "$skill_dir")
+        echo "   Installing skill: $skill_name"
+        cp -r "$skill_dir" "$SKILLS_DIR/"
     fi
-else
-    echo "${YELLOW}⚠️  known_marketplaces.json not found, creating...${NC}"
-    mkdir -p "$(dirname "$KNOWN_MARKETPLACES")"
-    python3 << PYEOF
-import json
-import os
-from datetime import datetime, timezone
-
-data = {
-    "keejkrej": {
-        "source": {
-            "source": "github",
-            "repo": "keejkrej/biology-agent"
-        },
-        "installLocation": os.path.expanduser("$MARKETPLACE_DIR"),
-        "lastUpdated": datetime.now(timezone.utc).isoformat()
-    }
-}
-
-with open(os.path.expanduser("$KNOWN_MARKETPLACES"), 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-PYEOF
-    echo "${GREEN}✓${NC} Created known_marketplaces.json"
-fi
-echo ""
-
-# Step 9: Clean up old manual MCP config if it exists (compatibility)
-echo "9️⃣  Checking for old manual MCP configuration..."
-if claude mcp list 2>/dev/null | grep -q "biology"; then
-    echo "${YELLOW}   Found manual biology MCP entry, removing for clean auto-discovery...${NC}"
-    claude mcp remove biology 2>/dev/null || true
-    echo "${GREEN}✓${NC} Removed manual configuration"
-else
-    echo "   No manual configuration found"
-fi
+done
+echo "${GREEN}✓${NC} Skills installed to $SKILLS_DIR"
 echo ""
 
 # Final instructions
@@ -246,8 +125,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "1. ${YELLOW}Restart Claude Code${NC} (fully quit and reopen)"
 echo ""
-echo "2. The biology MCP server will be auto-discovered"
-echo "   via the custom 'keejkrej' marketplace"
+echo "2. The biology MCP server will be available"
 echo ""
 echo "3. Available MCP tools:"
 echo "   • read_microscopy_metadata"
@@ -257,10 +135,13 @@ echo "   • get_channel_info"
 echo "   • get_physical_dimensions"
 echo "   • list_scenes"
 echo ""
-echo "4. CLI tools are available at:"
+echo "4. Available skills:"
+ls "$SKILLS_DIR" 2>/dev/null | sed 's/^/   • /' || echo "   (check ~/.claude/skills/)"
+echo ""
+echo "5. CLI tools are available at:"
 echo "   $INSTALL_DIR/scripts/"
 echo ""
-echo "5. Optional: Add scripts to PATH in ~/.zshrc:"
+echo "6. Optional: Add scripts to PATH in ~/.zshrc:"
 echo "   export PATH=\"$INSTALL_DIR/scripts:\$PATH\""
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
