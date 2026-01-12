@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "keejkrej",
+  "description": "Biology microscopy analysis toolkit",
+  "owner": {
+    "name": "Biology Research Community"
+  },
+  "plugins": [
+    {
+      "name": "biology-microscopy",
+      "description": "Microscopy data analysis toolkit with bioio. Read metadata, validate files, and analyze microscopy images (OME-TIFF, ND2, CZI, etc.).",
+      "version": "1.0.0",
+      "author": {
+        "name": "Biology Research Community"
+      },
+      "source": "./biology-microscopy",
+      "category": "science"
+    }
+  ]
+}

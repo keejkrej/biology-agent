@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "biology": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/server.py"]
+    }
+  }
+}

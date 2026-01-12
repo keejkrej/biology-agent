@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""
+Batch Metadata Converter
+
+Convert metadata from multiple microscopy files to JSON or CSV format.
+Part of the Biology Agent toolkit.
+
+Usage:
+    batch-convert-metadata <directory> [--format json|csv] [--output output_file] [--recursive]
+"""
+
+import sys
+import json
+import csv
+from pathlib import Path
+from typing import List, Dict, Any
+
+# Add parent mcp-server to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcp-server"))
+
+from core import read_microscopy_metadata, get_image_info
+
+
+# Supported microscopy file extensions
+MICROSCOPY_EXTENSIONS = {
+    '.tiff', '.tif', '.ome.tiff', '.ome.tif',
+    '.nd2',
+    '.czi',
+    '.lif',
+    '.vsi',
+}
+
+
+def find_microscopy_files(directory: Path, recursive: bool = False) -> List[Path]:
+    """Find all microscopy files in a directory."""
+    files = []
+
+    if recursive:
+        # Search recursively
+        for ext in MICROSCOPY_EXTENSIONS:
+            files.extend(directory.rglob(f"*{ext}"))
+    else:
+        # Search only in top-level directory
+        for ext in MICROSCOPY_EXTENSIONS:
+            files.extend(directory.glob(f"*{ext}"))
+
+    # Sort by name for consistent ordering
+    return sorted(set(files))
+
+
+def extract_metadata_batch(files: List[Path], verbose: bool = False) -> List[Dict[str, Any]]:
+    """Extract metadata from multiple files."""
+    results = []
+
+    total = len(files)
+    for idx, file_path in enumerate(files, 1):
+        if verbose:
+            print(f"Processing [{idx}/{total}]: {file_path.name}...", file=sys.stderr)
+
+        try:
+            info = get_image_info(str(file_path))
+
+            if "error" in info:
+                if verbose:
+                    print(f"  ⚠️  Error: {info['error']}", file=sys.stderr)
+                results.append({
+                    "file_path": str(file_path),
+                    "file_name": file_path.name,
+                    "status": "error",
+                    "error": info.get("error", "Unknown error")
+                })
+            else:
+                # Flatten the structure for CSV compatibility
+                flat_info = {
+                    "file_path": str(file_path),
+                    "file_name": info.get("file_name", file_path.name),
+                    "dimensions": info.get("dimensions", ""),
+                    "num_channels": info.get("num_channels", 0),
+                    "channel_names": ", ".join(info.get("channel_names", [])),
+                    "num_timepoints": info.get("num_timepoints", 0),
+                    "num_z_slices": info.get("num_z_slices", 0),
+                    "xy_dimensions": str(info.get("xy_dimensions", "")),
+                    "pixel_size_x_um": info.get("pixel_sizes_um", {}).get("X"),
+                    "pixel_size_y_um": info.get("pixel_sizes_um", {}).get("Y"),
+                    "pixel_size_z_um": info.get("pixel_sizes_um", {}).get("Z"),
+                    "has_multiple_scenes": info.get("has_multiple_scenes", False),
+                    "status": "success"
+                }
+                results.append(flat_info)
+                if verbose:
+                    print(f"  ✓ Success", file=sys.stderr)
+
+        except Exception as e:
+            if verbose:
+                print(f"  ❌ Exception: {e}", file=sys.stderr)
+            results.append({
+                "file_path": str(file_path),
+                "file_name": file_path.name,
+                "status": "exception",
+                "error": str(e)
+            })
+
+    return results
+
+
+def save_as_json(data: List[Dict[str, Any]], output_file: Path):
+    """Save metadata as JSON."""
+    with open(output_file, 'w') as f:
+        json.dump(data, f, indent=2)
+    print(f"✅ Saved JSON to: {output_file}")
+
+
+def save_as_csv(data: List[Dict[str, Any]], output_file: Path):
+    """Save metadata as CSV."""
+    if not data:
+        print("⚠️  No data to save")
+        return
+
+    # Get all unique keys from all records
+    fieldnames = set()
+    for record in data:
+        fieldnames.update(record.keys())
+    fieldnames = sorted(fieldnames)
+
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(data)
+
+    print(f"✅ Saved CSV to: {output_file}")
+
+
+def main():
+    """Main CLI entry point."""
+    args = sys.argv[1:]
+
+    if not args or '--help' in args or '-h' in args:
+        print(__doc__)
+        print("\nOptions:")
+        print("  --format json|csv   Output format (default: json)")
+        print("  --output FILE       Output file path (default: metadata.[json|csv])")
+        print("  --recursive, -r     Search subdirectories recursively")
+        print("  --verbose, -v       Show progress messages")
+        print("  --help, -h          Show this help message")
+        return 0
+
+    directory = None
+    output_format = 'json'
+    output_file = None
+    recursive = False
+    verbose = False
+
+    for i, arg in enumerate(args):
+        if arg == '--format' and i + 1 < len(args):
+            output_format = args[i + 1]
+        elif arg == '--output' and i + 1 < len(args):
+            output_file = Path(args[i + 1])
+        elif arg in ('--recursive', '-r'):
+            recursive = True
+        elif arg in ('--verbose', '-v'):
+            verbose = True
+        elif not arg.startswith('--') and not (i > 0 and args[i-1] in ('--format', '--output')):
+            directory = Path(arg)
+
+    if not directory:
+        print("❌ Error: No directory provided")
+        print("Usage: batch-convert-metadata <directory> [options]")
+        return 1
+
+    if not directory.exists():
+        print(f"❌ Error: Directory not found: {directory}")
+        return 1
+
+    if not directory.is_dir():
+        print(f"❌ Error: Not a directory: {directory}")
+        return 1
+
+    # Set default output file if not specified
+    if output_file is None:
+        output_file = Path(f"metadata.{output_format}")
+
+    # Find microscopy files
+    print(f"🔍 Searching for microscopy files in: {directory}")
+    if recursive:
+        print(f"   (recursive search enabled)")
+
+    files = find_microscopy_files(directory, recursive)
+
+    if not files:
+        print(f"⚠️  No microscopy files found in {directory}")
+        print(f"   Looking for: {', '.join(MICROSCOPY_EXTENSIONS)}")
+        return 1
+
+    print(f"📁 Found {len(files)} file(s)")
+    print()
+
+    # Extract metadata
+    metadata = extract_metadata_batch(files, verbose=verbose)
+
+    # Save output
+    if output_format == 'json':
+        save_as_json(metadata, output_file)
+    elif output_format == 'csv':
+        save_as_csv(metadata, output_file)
+    else:
+        print(f"❌ Error: Unsupported format '{output_format}'. Use 'json' or 'csv'.")
+        return 1
+
+    # Print summary
+    successful = sum(1 for m in metadata if m.get('status') == 'success')
+    failed = len(metadata) - successful
+
+    print()
+    print(f"📊 Summary: {successful} successful, {failed} failed")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

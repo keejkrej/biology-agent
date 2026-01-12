@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "biology": {
+      "command": "/Users/YOUR_USERNAME/workspace/biology-agent/.venv/bin/python",
+      "args": ["/Users/YOUR_USERNAME/workspace/biology-agent/mcp-server/server.py"],
+      "env": {}
+    }
+  }
+}

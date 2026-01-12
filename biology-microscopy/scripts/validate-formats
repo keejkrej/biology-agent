@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""
+Microscopy Format Validator
+
+Validate that microscopy files can be read by bioio and check for issues.
+Part of the Biology Agent toolkit.
+
+Usage:
+    validate-formats <path> [--recursive]
+
+Path can be a single file or a directory.
+"""
+
+import sys
+from pathlib import Path
+from typing import List, Dict, Any
+
+# Add parent mcp-server to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcp-server"))
+
+from core import validate_microscopy_file
+
+
+# Supported microscopy file extensions
+MICROSCOPY_EXTENSIONS = {
+    '.tiff', '.tif', '.ome.tiff', '.ome.tif',
+    '.nd2',
+    '.czi',
+    '.lif',
+    '.vsi',
+}
+
+
+def find_microscopy_files(directory: Path, recursive: bool = False) -> List[Path]:
+    """Find all microscopy files in a directory."""
+    files = []
+
+    if recursive:
+        for ext in MICROSCOPY_EXTENSIONS:
+            files.extend(directory.rglob(f"*{ext}"))
+    else:
+        for ext in MICROSCOPY_EXTENSIONS:
+            files.extend(directory.glob(f"*{ext}"))
+
+    return sorted(set(files))
+
+
+def validate_files(files: List[Path]) -> Dict[str, Any]:
+    """Validate multiple files and collect results."""
+    results = {
+        "total": len(files),
+        "valid": 0,
+        "invalid": 0,
+        "warnings": 0,
+        "details": []
+    }
+
+    for idx, file_path in enumerate(files, 1):
+        print(f"\n[{idx}/{len(files)}] Validating: {file_path.name}")
+        print("-" * 60)
+
+        validation = validate_microscopy_file(str(file_path))
+
+        if "error" in validation:
+            print(f"❌ Validation Error: {validation['error']}")
+            results["invalid"] += 1
+            results["details"].append({
+                "file": str(file_path),
+                "status": "error",
+                "message": validation["error"]
+            })
+            continue
+
+        # Check results
+        if validation.get("readable_by_bioio"):
+            results["valid"] += 1
+            print(f"✅ Valid - Readable by bioio")
+        else:
+            results["invalid"] += 1
+            print(f"❌ Invalid - Cannot be read by bioio")
+
+        # Show file info
+        if validation.get("file_size_mb"):
+            print(f"   Size: {validation['file_size_mb']} MB")
+
+        # Show warnings
+        if validation.get("warnings"):
+            results["warnings"] += len(validation["warnings"])
+            print(f"\n⚠️  Warnings ({len(validation['warnings'])}):")
+            for warning in validation["warnings"]:
+                print(f"   - {warning}")
+
+        # Show errors
+        if validation.get("errors"):
+            print(f"\n❌ Errors ({len(validation['errors'])}):")
+            for error in validation["errors"]:
+                print(f"   - {error}")
+
+        # Show summary if available
+        if validation.get("summary"):
+            print(f"\n📊 Summary:")
+            summary = validation["summary"]
+            print(f"   Dimensions: {summary.get('dimensions', 'N/A')}")
+            print(f"   Channels: {summary.get('channels', 'N/A')}")
+            print(f"   Timepoints: {summary.get('timepoints', 'N/A')}")
+            print(f"   Z-slices: {summary.get('z_slices', 'N/A')}")
+
+        # Store details
+        results["details"].append({
+            "file": str(file_path),
+            "status": "valid" if validation.get("readable_by_bioio") else "invalid",
+            "warnings": len(validation.get("warnings", [])),
+            "errors": len(validation.get("errors", []))
+        })
+
+    return results
+
+
+def main():
+    """Main CLI entry point."""
+    args = sys.argv[1:]
+
+    if not args or '--help' in args or '-h' in args:
+        print(__doc__)
+        print("\nOptions:")
+        print("  --recursive, -r   Search subdirectories recursively")
+        print("  --help, -h        Show this help message")
+        return 0
+
+    path_arg = None
+    recursive = False
+
+    for arg in args:
+        if arg in ('--recursive', '-r'):
+            recursive = True
+        elif not arg.startswith('--'):
+            path_arg = arg
+
+    if not path_arg:
+        print("❌ Error: No path provided")
+        print("Usage: validate-formats <path> [--recursive]")
+        return 1
+
+    path = Path(path_arg).expanduser().resolve()
+
+    if not path.exists():
+        print(f"❌ Error: Path not found: {path}")
+        return 1
+
+    # Determine if single file or directory
+    if path.is_file():
+        files = [path]
+        print(f"🔍 Validating single file: {path.name}")
+    elif path.is_dir():
+        print(f"🔍 Searching for microscopy files in: {path}")
+        if recursive:
+            print("   (recursive search enabled)")
+        files = find_microscopy_files(path, recursive)
+
+        if not files:
+            print(f"\n⚠️  No microscopy files found in {path}")
+            print(f"   Looking for: {', '.join(MICROSCOPY_EXTENSIONS)}")
+            return 1
+
+        print(f"📁 Found {len(files)} file(s)")
+    else:
+        print(f"❌ Error: Invalid path: {path}")
+        return 1
+
+    # Validate files
+    results = validate_files(files)
+
+    # Print final summary
+    print("\n" + "=" * 60)
+    print("📊 VALIDATION SUMMARY")
+    print("=" * 60)
+    print(f"Total files: {results['total']}")
+    print(f"✅ Valid: {results['valid']}")
+    print(f"❌ Invalid: {results['invalid']}")
+    print(f"⚠️  Total warnings: {results['warnings']}")
+    print()
+
+    # Return non-zero if any files failed
+    return 0 if results['invalid'] == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

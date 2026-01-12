@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""
+Microscopy Info CLI Tool
+
+Quick command-line utility to display metadata from microscopy files.
+Part of the Biology Agent toolkit.
+
+Usage:
+    microscopy-info <file_path> [--verbose] [--json]
+"""
+
+import sys
+import json
+from pathlib import Path
+from typing import Optional
+
+# Add parent mcp-server to path to import core functions
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcp-server"))
+
+from core import read_microscopy_metadata, get_image_info, validate_microscopy_file
+
+
+def print_info(file_path: str, verbose: bool = False, output_json: bool = False):
+    """Print microscopy file information."""
+
+    if verbose:
+        # Get full metadata
+        data = read_microscopy_metadata(file_path)
+    else:
+        # Get summary info
+        data = get_image_info(file_path)
+
+    if output_json:
+        print(json.dumps(data, indent=2))
+    else:
+        # Pretty print for terminal
+        if "error" in data:
+            print(f"❌ Error: {data['error']}")
+            if "traceback" in data and verbose:
+                print(f"\nTraceback:\n{data['traceback']}")
+            return 1
+
+        print(f"\n📊 Microscopy File Info: {data.get('file_name', 'Unknown')}")
+        print("=" * 60)
+
+        if verbose:
+            # Verbose output
+            print(f"\n📏 Dimensions:")
+            dims = data.get('dimensions', {})
+            print(f"  Order: {dims.get('order', 'N/A')}")
+            print(f"  Shape: {data.get('shape', 'N/A')}")
+            print(f"  T: {dims.get('T', 0)} timepoints")
+            print(f"  C: {dims.get('C', 0)} channels")
+            print(f"  Z: {dims.get('Z', 0)} slices")
+            print(f"  Y: {dims.get('Y', 0)} pixels")
+            print(f"  X: {dims.get('X', 0)} pixels")
+
+            print(f"\n🔬 Channels:")
+            for idx, name in enumerate(data.get('channel_names', [])):
+                print(f"  [{idx}] {name}")
+
+            print(f"\n📐 Physical Pixel Sizes (µm):")
+            pxsizes = data.get('physical_pixel_sizes', {})
+            print(f"  X: {pxsizes.get('X', 'N/A')}")
+            print(f"  Y: {pxsizes.get('Y', 'N/A')}")
+            print(f"  Z: {pxsizes.get('Z', 'N/A')}")
+
+            scenes = data.get('scenes', [])
+            if scenes:
+                print(f"\n🎬 Scenes: {len(scenes)}")
+                for scene in scenes:
+                    print(f"  - {scene}")
+                print(f"  Current: {data.get('current_scene', 'N/A')}")
+
+            if 'metadata' in data:
+                print(f"\n📋 Format-specific metadata available")
+
+        else:
+            # Concise output
+            print(f"  Dimensions: {data.get('dimensions', 'N/A')}")
+            print(f"  Channels: {data.get('num_channels', 0)} - {', '.join(data.get('channel_names', []))}")
+            print(f"  Timepoints: {data.get('num_timepoints', 0)}")
+            print(f"  Z-slices: {data.get('num_z_slices', 0)}")
+            print(f"  XY size: {data.get('xy_dimensions', (0, 0))}")
+
+            pxsizes = data.get('pixel_sizes_um', {})
+            print(f"  Pixel size (µm): X={pxsizes.get('X', 'N/A')}, Y={pxsizes.get('Y', 'N/A')}, Z={pxsizes.get('Z', 'N/A')}")
+
+            if data.get('has_multiple_scenes'):
+                print(f"  ⚠️  Multiple scenes detected - use --verbose for details")
+
+        print()
+
+    return 0
+
+
+def main():
+    """Main CLI entry point."""
+    args = sys.argv[1:]
+
+    if not args or '--help' in args or '-h' in args:
+        print(__doc__)
+        print("\nOptions:")
+        print("  --verbose, -v   Show detailed metadata")
+        print("  --json          Output as JSON")
+        print("  --validate      Run validation checks")
+        print("  --help, -h      Show this help message")
+        return 0
+
+    file_path = None
+    verbose = False
+    output_json = False
+    run_validation = False
+
+    for arg in args:
+        if arg in ('--verbose', '-v'):
+            verbose = True
+        elif arg == '--json':
+            output_json = True
+        elif arg == '--validate':
+            run_validation = True
+        elif not arg.startswith('--'):
+            file_path = arg
+
+    if not file_path:
+        print("❌ Error: No file path provided")
+        print("Usage: microscopy-info <file_path> [--verbose] [--json] [--validate]")
+        return 1
+
+    if run_validation:
+        result = validate_microscopy_file(file_path)
+        if output_json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"\n✅ Validation Report: {result.get('file_name', 'Unknown')}")
+            print("=" * 60)
+            print(f"  Exists: {'✓' if result.get('exists') else '✗'}")
+            print(f"  Is file: {'✓' if result.get('is_file') else '✗'}")
+            print(f"  Size: {result.get('file_size_mb', 0)} MB")
+            print(f"  Readable by bioio: {'✓' if result.get('readable_by_bioio') else '✗'}")
+
+            if result.get('warnings'):
+                print(f"\n⚠️  Warnings:")
+                for warning in result['warnings']:
+                    print(f"    - {warning}")
+
+            if result.get('errors'):
+                print(f"\n❌ Errors:")
+                for error in result['errors']:
+                    print(f"    - {error}")
+
+            if result.get('summary'):
+                print(f"\n📊 Summary:")
+                for key, value in result['summary'].items():
+                    print(f"    {key}: {value}")
+            print()
+        return 0 if result.get('readable_by_bioio') else 1
+
+    return print_info(file_path, verbose, output_json)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
