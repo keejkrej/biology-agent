@@ -1,0 +1,8 @@
+{
+  "name": "biology-structure",
+  "description": "Biomolecular structure prediction using Boltz-2. Predict 3D structures of proteins, DNA, RNA, and ligand complexes via NVIDIA NIM API or local GPU.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Biology Research Community"
+  }
+}

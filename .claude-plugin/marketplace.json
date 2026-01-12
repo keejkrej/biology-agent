@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "keejkrej",
-  "description": "Biology microscopy analysis toolkit",
+  "description": "Biology research toolkit - microscopy analysis and structure prediction",
   "owner": {
     "name": "Biology Research Community"
   },
@@ -14,6 +14,16 @@
         "name": "Biology Research Community"
       },
       "source": "./biology-microscopy",
+      "category": "science"
+    },
+    {
+      "name": "biology-structure",
+      "description": "Biomolecular structure prediction using Boltz-2. Predict 3D structures of proteins, DNA, RNA, and ligand complexes via NVIDIA NIM API or local GPU.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Biology Research Community"
+      },
+      "source": "./biology-structure",
       "category": "science"
     }
   ]

@@ -1,0 +1,49 @@
+[project]
+name = "biology-structure-server"
+version = "1.0.0"
+description = "Biomolecular structure prediction MCP server for Claude Code - predict protein/DNA/RNA structures using Boltz-2"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = ["structure-prediction", "boltz", "protein-folding", "mcp", "claude-code", "nvidia-nim"]
+authors = [
+    { name = "Biology Research Community" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "fastmcp>=2.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+local = [
+    "boltz>=1.0.0",
+    "torch>=2.0.0",
+]
+all = [
+    "boltz>=1.0.0",
+    "torch>=2.0.0",
+]
+
+[project.scripts]
+biology-structure-server = "biology_structure_server:main"
+
+[project.urls]
+Homepage = "https://github.com/keejkrej/biology-agent"
+Repository = "https://github.com/keejkrej/biology-agent"
+Issues = "https://github.com/keejkrej/biology-agent/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["biology_structure_server"]
